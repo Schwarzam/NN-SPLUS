@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import golden
 from PIL import Image
+from os import listdir
+from os.path import isfile, join
 
 rw, gw, bw = 0.299,  0.587,  0.114  # NTSC (also used by PIL in "convert")
 rw, gw, bw = 0.3086, 0.6094, 0.0820  # linear
@@ -30,13 +32,13 @@ def get_clip(m, m_min=None, m_max=None):
         m_min = min(m)
     if m_max == None:
         m_max = max(m)
-    
+
     return np.clip(m, m_min, m_max)
 
 def setLevel(data, pp):
     vs = data
     vs = get_clip(vs, 0, None)
-    
+
     ii = np.array(pp) * len(vs)
     ii = ii.astype('int')
     ii = np.clip(ii, 0, len(vs) - 1)
@@ -50,37 +52,37 @@ def meanstd(datasorted, n_sigma = 3, n = 5):
     x = datasorted
 
     ihi = nx = len(x)
-    ilo = 0 
-    
+    ilo = 0
+
     xsort = x
-    
+
     for i in range(n):
         xs = xsort[ilo: ihi]
-        
+
         imed = (ilo+ihi) / 2
 
         aver = xs[int(imed)]
-        
+
         std1 = np.std(xs)
         std1 = rms(xs - aver)
-        
+
         lo = aver - n_sigma * std1
         hi = aver + n_sigma * std1
-        
+
         ilo = np.searchsorted(xsort, lo)
         ihi = np.searchsorted(xsort, hi, side='right')
-        
+
         nnx = ihi - ilo
-        
+
         if nnx == nx:
             break
         else:
             nx = nnx
-            
+
     remaining = xrem = xs[ilo:ihi]
     mean = np.mean(xrem)
     std = rms(xrem - mean)
-    
+
     return remaining, mean, std
 
 def RGB2im(RGB):
@@ -105,15 +107,15 @@ def da(k):
     a2 = k * (x2 - x0) + 1
     a1n = a1 ** n
     a1n = np.abs(a1n)
-    
+
     da1 = a1n - a2
     k = np.abs(k)
-    
+
     if k == 0:
         return da(1e-10)
     else:
         da1 = da1 / k
-        
+
     return np.abs(da1)
 
 def imscale(data, levels, y1):
@@ -124,22 +126,22 @@ def imscale(data, levels, y1):
     else:
         n = 1 / y1
         k = abs(golden(da))
-    
+
     r1 = np.log10(k* (x2-x0) + 1)
-    
+
     v = np.ravel(data)
     v = get_clip(v, 0, None)
-    
+
     d = k * (v - x0) + 1
     d = get_clip(d, 1e-30, None)
-    
+
     z = np.log10(d) / r1
     z = np.clip(z, 0, 1)
     z.shape = data.shape
-    
+
     z = z * 255
     z = z.astype('uint8')
-    
+
     return z
 
 def satK2m(K):
@@ -161,38 +163,47 @@ def satK2m(K):
 def adjust_saturation(RGB, K):
     m = satK2m(K)
     three, nx, ny = RGB.shape
-    
+
     RGB.shape = three, nx*ny
-    
+
     RGB = np.dot(m, RGB)
     RGB.shape = three, nx, ny
     return RGB
 
 class MakeImg():
-    def __init__(self, path, dx, dy, noiselum, satpercent, colorsatfac):
-        self.dx = dx  ##tamanho desejado no final
-        self.dy = dy
+    def __init__(self, pathdict, dx = None, dy = None, noiselum = 0.15, satpercent = 0.15, colorsatfac = 2):
         sgn = 1
 
         global unsatpercent
         unsatpercent = 1 - 0.01 * satpercent
 
         self.noiselums = {'R': noiselum, 'G': noiselum, 'B': noiselum}
-        
-        self.hduF378 = astropy.io.fits.open(f'{path}/Galaxy_F378.fits')
-        self.hduF395 = astropy.io.fits.open(f'{path}/Galaxy_F395.fits')
-        self.hduF410 = astropy.io.fits.open(f'{path}/Galaxy_F410.fits')
-        self.hduF430 = astropy.io.fits.open(f'{path}/Galaxy_F430.fits')
-        self.hduF515 = astropy.io.fits.open(f'{path}/Galaxy_F515.fits')
-        self.hduF660 = astropy.io.fits.open(f'{path}/Galaxy_F660.fits')
-        self.hduF861 = astropy.io.fits.open(f'{path}/Galaxy_F861.fits')
-        self.hduR = astropy.io.fits.open(f'{path}/Galaxy_R.fits')
-        self.hduG = astropy.io.fits.open(f'{path}/Galaxy_G.fits')
-        self.hduI = astropy.io.fits.open(f'{path}/Galaxy_I.fits')
-        self.hduU = astropy.io.fits.open(f'{path}/Galaxy_U.fits')
-        self.hduZ = astropy.io.fits.open(f'{path}/Galaxy_Z.fits')
 
-        self.ny, self.nx = self.hduR[0].data.shape
+        self.hduF378 = astropy.io.fits.getdata(pathdict['F378'])
+        self.hduF395 = astropy.io.fits.getdata(pathdict['F395'])
+        self.hduF410 = astropy.io.fits.getdata(pathdict['F410'])
+        self.hduF430 = astropy.io.fits.getdata(pathdict['F430'])
+        self.hduF515 = astropy.io.fits.getdata(pathdict['F515'])
+        self.hduF660 = astropy.io.fits.getdata(pathdict['F660'])
+        self.hduF861 = astropy.io.fits.getdata(pathdict['F861'])
+        self.hduR = astropy.io.fits.getdata(pathdict['R'])
+        self.hduG = astropy.io.fits.getdata(pathdict['G'])
+        self.hduI = astropy.io.fits.getdata(pathdict['I'])
+        self.hduU = astropy.io.fits.getdata(pathdict['U'])
+        self.hduZ = astropy.io.fits.getdata(pathdict['Z'])
+
+        ##tamanho desejado no final
+        if not dx:
+            self.dx = self.hduZ.shape[0]
+        else:
+            self.dx = dx
+
+        if not dy:
+            self.dy = self.hduZ.shape[1]
+        else:
+            self.dy = dy
+
+        self.ny, self.nx = self.hduR.shape
         self.yc = self.ny / 2
         self.xc = self.nx / 2
 
@@ -206,7 +217,7 @@ class MakeImg():
 
         self.stampsRGB = np.zeros((3, int(self.dy), int(self.dx)))
 
-        self.bands = ["R", "G", "I", "U", "B", "F378", "F395", "F410", "F430", "F515", "F660", "F861"]
+        self.bands = ["R", "G", "I", "U", "Z", "F378", "F395", "F410", "F430", "F515", "F660", "F861"]
         self.R = ["R", "I", "F861", "Z"]
         self.G = ["G", "F515", "F660"]
         self.B = ["U", "F378", "F395", "F410", "F430"]
@@ -216,15 +227,15 @@ class MakeImg():
         self.sgn = 1
         for band in self.bands:
             if band in self.R:
-                exec(f"self.data = self.hdu{band}[0].data")
+                exec(f"self.data = self.hdu{band}")
                 data = self.data[int(self.ylo):int(self.yhi), int(self.xlo):int(self.xhi)]
                 self.stampsRGB[0] = self.stampsRGB[0] + sgn * data
             if band in self.G:
-                exec(f"self.data = self.hdu{band}[0].data")
+                exec(f"self.data = self.hdu{band}")
                 data = self.data[int(self.ylo):int(self.yhi), int(self.xlo):int(self.xhi)]
                 self.stampsRGB[1] = self.stampsRGB[1] + sgn * data
             if band in self.B:
-                exec(f"self.data = self.hdu{band}[0].data")
+                exec(f"self.data = self.hdu{band}")
                 data = self.data[int(self.ylo):int(self.yhi), int(self.xlo):int(self.xhi)]
                 self.stampsRGB[2] = self.stampsRGB[2] + sgn * data
 
@@ -242,11 +253,12 @@ class MakeImg():
             self.levels = self.leveldict[RGB[i]]
             self.noiselum = self.noiselums[RGB[i]]
             self.scaled[i] = imscale(self.stampsRGB[i], self.levels, self.noiselum)
-            
+
         self.scaled = adjust_saturation(self.scaled, colorsatfac)
         self.im = RGB2im(self.scaled)
-        
-    def get(self):
+
+    def get(self, path):
+        plt.imsave(arr = np.array(self.im), fname = path)
         return self.im
 
     def get_array(self):
@@ -262,7 +274,7 @@ class MakeImg_data():
         unsatpercent = 1 - 0.01 * satpercent
 
         self.noiselums = {'R': noiselum, 'G': noiselum, 'B': noiselum}
-        
+
         self.hduF378 = F378
         self.hduF395 = F395
         self.hduF410 = F410
@@ -326,12 +338,30 @@ class MakeImg_data():
             self.levels = self.leveldict[RGB[i]]
             self.noiselum = self.noiselums[RGB[i]]
             self.scaled[i] = imscale(self.stampsRGB[i], self.levels, self.noiselum)
-            
+
         self.scaled = adjust_saturation(self.scaled, colorsatfac)
         self.im = RGB2im(self.scaled)
-        
+
     def get(self):
         return self.im
 
     def get_array(self):
         return np.array(self.im)
+
+if __name__ == '__main__':
+    import os
+    mypath = os.path.dirname(os.path.abspath(__file__))
+    onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
+
+    bands = ["R", "G", "I", "U", "Z", "F378", "F395", "F410", "F430", "F515", "F660", "F861"]
+    pathdict = {}
+
+    for band in bands:
+        for file in onlyfiles:
+            if f"_{band}" in file:
+                 pathdict[band] = f'{mypath}/{file}'
+                 filename = file.replace(f'_{band}', '')
+                 filename = filename.replace(f'.fits', '.png')
+                 filename = f'{mypath}/{filename}'
+
+    MakeImg(pathdict, noiselum = 0.01).get(path = filename)
